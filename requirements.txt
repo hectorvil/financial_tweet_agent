@@ -1,11 +1,12 @@
-torch==2.1.2
-transformers==4.34.0
-sentence-transformers==2.2.2
+torch==2.0.1
+transformers==4.36.2
+sentence-transformers==2.6.1
+huggingface_hub==0.20.3
 chromadb==0.4.24
-tweepy==4.14.0
 openai==1.30.0
+tweepy==4.14.0
 plotly==6.0.1
 pandas==2.1.2
 pyarrow==13.0.0
-joblib==1.4.2
 emoji==2.14.1
+joblib==1.4.2
