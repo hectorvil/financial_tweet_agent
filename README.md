@@ -4,7 +4,7 @@ Un agente Streamlit interactivo que analiza y clasifica tweets financieros por *
 
 ---
 
-##¿Qué hace?
+## ¿Qué hace?
 
 - **Etiquetado automático** de tweets financieros (sentimiento: `positive`, `neutral`, `negative`; tema: 21 categorías como `Politics`, `IPO`, `Federal Reserve`, etc.)
 - **Chat RAG histórico**: puedes preguntar cosas como *"¿Qué se dice sobre NVIDIA?"*
@@ -13,7 +13,7 @@ Un agente Streamlit interactivo que analiza y clasifica tweets financieros por *
 
 ---
 
-##Estructura
+## Estructura
 
 financial-tweet-agent/
 ├── app.py
