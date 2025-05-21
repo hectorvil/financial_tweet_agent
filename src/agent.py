@@ -5,7 +5,6 @@ import openai
 from src.vector_db import VectorDB
 from src.data_pipeline import add_labels
 
-
 class FinancialTweetAgent:
     def __init__(self, model="gpt-4o-mini-2024-07-18"):
         self.model = model
@@ -14,20 +13,26 @@ class FinancialTweetAgent:
 
     def ingest(self, parquet_file):
         """Carga un archivo parquet, etiqueta si es necesario, y añade a Chroma."""
+        print("📥 Leyendo archivo parquet...")
         df = pd.read_parquet(parquet_file)
 
-        # Si faltan columnas, las genera
+        print("🧼 Limpieza y etiquetado...")
         if "sentiment" not in df or "topic" not in df:
             df = add_labels(df)
+        else:
+            print("✔️ Ya viene etiquetado con sentimiento y tema.")
 
         if "doc_id" not in df:
             df["doc_id"] = df.index.astype(str)
 
+        print("📦 Añadiendo a la base vectorial...")
         self.db.add(df["doc_id"].tolist(), df["clean"].tolist())
+
+        print("🧠 Cargando en memoria interna del agente...")
         self.df = pd.concat([self.df, df], ignore_index=True)
+        print("✅ Ingest terminado")
 
     def pivot(self, min_m=20):
-        """Crea un DataFrame con proporciones por ticker."""
         df = self.df.copy()
         if "tickers" not in df:
             return pd.DataFrame()
@@ -52,7 +57,6 @@ class FinancialTweetAgent:
         return piv.sort_values("neg_ratio", ascending=False)
 
     def insight_hist(self, query: str, k: int = 30) -> str:
-        """Consulta RAG sobre tweets históricos almacenados."""
         context = "\n".join(self.db.query(query, k))
         prompt = f"""
 Usa solo el siguiente contexto para responder a la consulta.
@@ -71,9 +75,7 @@ Responde en español, de forma concisa y clara. Cita tickers si los hay.
         return response.choices[0].message.content.strip()
 
     def live_search(self, query: str, n: int = 30):
-        """Busca tweets recientes con Tweepy, los etiqueta y añade al histórico."""
         from src.twitter_live import search
-
         live = pd.DataFrame(search(query, n=n))
         if live.empty:
             return pd.DataFrame()
@@ -81,13 +83,15 @@ Responde en español, de forma concisa y clara. Cita tickers si los hay.
         if "doc_id" not in live:
             live["doc_id"] = live.index.astype(str)
 
+        print("⚡ Etiquetando tweets en vivo...")
         live = add_labels(live)
+
+        print("📦 Añadiendo nuevos tweets a la base vectorial...")
         self.db.add(live["doc_id"].tolist(), live["clean"].tolist())
         self.df = pd.concat([self.df, live], ignore_index=True)
         return live
 
     def insight_live(self, query: str, n: int = 30) -> str:
-        """Consulta en vivo con fallback a histórico si no hay resultados."""
         recent = self.live_search(query, n=n)
 
         if not recent.empty:
