@@ -6,37 +6,67 @@ from src.data_pipeline import add_labels, clean
 
 
 class FinancialTweetAgent:
+    """
+    Orquesta la ingesta de Parquet, gestiona la base vectorial ChromaDB
+    y expone utilidades para chat histórico, live search y dashboard.
+    """
+
     def __init__(self, model: str = "gpt-4o-mini-2024-07-18"):
         self.model = model
         self.db = VectorDB()
         self.df = pd.DataFrame()
 
-    # ── ingesta ────────────────────────────────────────────────────
+    # ────────────────────────────────────────────────────────────────
+    # Ingesta
+    # ────────────────────────────────────────────────────────────────
     def ingest(self, parquet_file):
+        """
+        Carga un Parquet, añade etiquetas faltantes y sube documentos a Chroma.
+
+        - Si el Parquet YA incluye columnas `sentiment`, `topic`, `tickers`,
+          `clean` y opcionalmente `embedding`, no se recalculan.
+        - Evita duplicados comparando `doc_id`.
+        """
         df = pd.read_parquet(parquet_file)
 
-        needs_labels = (
-            "sentiment" not in df or "topic" not in df or "clean" not in df
+        # 1) Completar etiquetas solo si faltan
+        needs_labels = any(
+            col not in df for col in ("sentiment", "topic", "clean", "tickers")
         )
         if needs_labels:
-            df = add_labels(df)
-        elif df["clean"].isna().any():
+            df = add_labels(df, skip_if_present=True)
+
+        # 2) Clean fallback
+        if "clean" not in df:
             df["clean"] = df["text"].map(clean)
 
+        # 3) doc_id obligatorio
         if "doc_id" not in df:
             df["doc_id"] = df.index.astype(str)
 
-        self.db.add(df["doc_id"].tolist(), df["clean"].tolist())
+        # 4) Añadir a Chroma (usa embeddings precalculados si existen)
+        if "embedding" in df:
+            self.db.add(
+                ids=df["doc_id"].tolist(),
+                texts=df["clean"].tolist(),
+                embeddings=df["embedding"].tolist(),
+            )
+        else:
+            self.db.add(df["doc_id"].tolist(), df["clean"].tolist())
+
+        # 5) Cache in-memory para pivot
         self.df = pd.concat([self.df, df], ignore_index=True)
 
-    # ── pivot ──────────────────────────────────────────────────────
+    # ────────────────────────────────────────────────────────────────
+    # Dashboard helper
+    # ────────────────────────────────────────────────────────────────
     def pivot(self, min_m: int = 20) -> pd.DataFrame:
-        df = self.df.copy()
-        if df.empty or "tickers" not in df:
+        """Devuelve un DataFrame agregado por ticker y sentimiento."""
+        if self.df.empty or "tickers" not in self.df:
             return pd.DataFrame()
 
         piv = (
-            df.explode("tickers")
+            self.df.explode("tickers")
             .query("tickers != ''")
             .groupby(["tickers", "sentiment"])
             .size()
@@ -44,7 +74,7 @@ class FinancialTweetAgent:
             .reset_index()
         )
 
-        for col in ["positive", "neutral", "negative"]:
+        for col in ("positive", "neutral", "negative"):
             if col not in piv:
                 piv[col] = 0
 
@@ -54,18 +84,20 @@ class FinancialTweetAgent:
         piv["neg_ratio"] = piv["negative"] / piv["total"]
         return piv.sort_values("neg_ratio", ascending=False)
 
-    # ── RAG histórico ──────────────────────────────────────────────
+    # ────────────────────────────────────────────────────────────────
+    # Chat histórico (RAG sobre corpus)
+    # ────────────────────────────────────────────────────────────────
     def insight_hist(self, query: str, k: int = 30) -> str:
         docs = self.db.query(query, k)
         context = "\n".join(text[:280] for text in docs)
 
         prompt = f"""
-Usa solo el siguiente contexto para responder a la consulta.
+Usa solo el siguiente contexto para responder.
 Contexto:
 {context}
 
 Pregunta: {query}
-Responde en español, de forma concisa y clara. Cita tickers si los hay.
+Responde en español, de forma breve y clara.
 """.strip()
 
         response = openai.chat.completions.create(
@@ -75,7 +107,9 @@ Responde en español, de forma concisa y clara. Cita tickers si los hay.
         )
         return response.choices[0].message.content.strip()
 
-    # ── live search ───────────────────────────────────────────────
+    # ────────────────────────────────────────────────────────────────
+    # Live search (Twitter) + ingest
+    # ────────────────────────────────────────────────────────────────
     def live_search(self, query: str, n: int = 30) -> pd.DataFrame:
         from src.twitter_live import search
 
@@ -86,28 +120,24 @@ Responde en español, de forma concisa y clara. Cita tickers si los hay.
         if "doc_id" not in live:
             live["doc_id"] = live.index.astype(str)
 
-        live = add_labels(live)
+        live = add_labels(live)  # siempre etiqueta porque viene sin procesar
         self.db.add(live["doc_id"].tolist(), live["clean"].tolist())
         self.df = pd.concat([self.df, live], ignore_index=True)
         return live
 
     def insight_live(self, query: str, n: int = 30) -> str:
         recent = self.live_search(query, n=n)
-
         if not recent.empty:
             context = "\n".join(recent["clean"].tolist()[:30])
-            fuente = "tweets en vivo"
         else:
             context = "\n".join(self.db.query(query, k=30))
-            fuente = "datos históricos"
 
         prompt = f"""
-Con base en el siguiente contexto extraído de {fuente}, responde brevemente.
+Con base en el contexto, responde a la pregunta.
 Contexto:
 {context}
 
 Pregunta: {query}
-Responde en español, indicando tendencias o tickers si aplica.
 """.strip()
 
         response = openai.chat.completions.create(
