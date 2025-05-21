@@ -1,14 +1,13 @@
 import re
 import emoji
 from pathlib import Path
-
 import pandas as pd
 import torch
 import joblib
 import streamlit as st
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-# ── mapeos ─────────────────────────────────────────────────────────
+# ── tablas de mapeo ───────────────────────────────────────────────
 id2label = {0: "negative", 1: "neutral", 2: "positive"}
 
 label_map = [
@@ -18,67 +17,69 @@ label_map = [
     "Stock Movement", "Tech", "Trade", "USD"
 ]
 
-# ── carga de clasificador de temas ─────────────────────────────────
+# ── carga de clasificador de temas ────────────────────────────────
 topic_path = Path(__file__).with_name("topic_clf.joblib")
-try:
-    topic_clf = joblib.load(topic_path)
-except FileNotFoundError:
-    topic_clf = None
-    print(f"⚠️  No se encontró {topic_path.name}. Se omitirá la predicción de temas.")
+topic_clf = joblib.load(topic_path) if topic_path.exists() else None
 
 # ── FinBERT cacheado ──────────────────────────────────────────────
 @st.cache_resource
 def load_finbert():
-    tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
-    model = AutoModelForSequenceClassification.from_pretrained("ProsusAI/finbert")
-    model.eval()
-    return tokenizer, model
+    tok = AutoTokenizer.from_pretrained("ProsusAI/finbert")
+    mdl = AutoModelForSequenceClassification.from_pretrained("ProsusAI/finbert")
+    mdl.eval()
+    return tok, mdl
 
-# ── limpieza y utilidades ─────────────────────────────────────────
+# ── utilidades de limpieza ───────────────────────────────────────
 def clean(text: str) -> str:
     text = emoji.replace_emoji(text, replace="")
     text = re.sub(r"http\S+|@\w+|#\w+", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
-
 def finbert_sentiment(texts: list[str], batch: int = 32) -> list[str]:
-    tokenizer, model = load_finbert()
+    tok, mdl = load_finbert()
     preds = []
     for i in range(0, len(texts), batch):
-        chunk = texts[i : i + batch]
-        toks = tokenizer(chunk, padding=True, truncation=True, return_tensors="pt")
-        with torch.no_grad():
-            logits = model(**toks).logits
+        toks = tok(texts[i:i+batch], padding=True, truncation=True, return_tensors="pt")
+        with torch.inference_mode():
+            logits = mdl(**toks).logits
         preds.extend(torch.argmax(logits, dim=1).tolist())
     return [id2label[p] for p in preds]
 
-
 COMMON_WORDS = {"BANK", "GDP", "USA", "FED", "ECB", "USD"}
-
 
 def extract_tickers(text: str) -> list[str]:
     tickers = [t.lstrip("$") for t in re.findall(r"\$?[A-Z]{2,5}\b", text)]
     return [t for t in tickers if t not in COMMON_WORDS]
 
-# ── pipeline principal ────────────────────────────────────────────
-def add_labels(df: pd.DataFrame) -> pd.DataFrame:
+# ── pipeline principal ───────────────────────────────────────────
+def add_labels(df: pd.DataFrame, *, skip_if_present: bool = True) -> pd.DataFrame:
+    """
+    Añade columnas clean, sentiment, tickers y topic solo si faltan.
+    Si `skip_if_present=True`, respeta las columnas ya calculadas.
+    """
     df = df.copy()
-    df["clean"] = df["text"].map(clean)
 
-    # Sentimiento
-    df["sentiment"] = finbert_sentiment(df["clean"].tolist())
+    # Clean
+    if "clean" not in df:
+        df["clean"] = df["text"].map(clean)
+
+    # Sentiment
+    if "sentiment" not in df:
+        df["sentiment"] = finbert_sentiment(df["clean"].tolist())
 
     # Tickers
-    df["tickers"] = df["clean"].map(extract_tickers)
+    if "tickers" not in df or not skip_if_present:
+        df["tickers"] = df["clean"].map(extract_tickers)
 
-    # Tema
-    if "label" in df:
-        df["topic"] = df["label"].map(
-            lambda x: label_map[x] if 0 <= x < len(label_map) else "Unknown"
-        )
-    elif topic_clf:
-        df["topic"] = topic_clf.predict(df["clean"])
-    else:
-        df["topic"] = "Unknown"
+    # Topic
+    if "topic" not in df:
+        if "label" in df:
+            df["topic"] = df["label"].map(
+                lambda x: label_map[x] if 0 <= x < len(label_map) else "Unknown"
+            )
+        elif topic_clf:
+            df["topic"] = topic_clf.predict(df["clean"])
+        else:
+            df["topic"] = "Unknown"
 
     return df
