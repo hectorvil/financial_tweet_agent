@@ -17,14 +17,14 @@ label_map = [
     "Stock Movement", "Tech", "Trade", "USD"
 ]
 
-# ── Carga condicional del clasificador de temas ──
+# ── Carga opcional del clasificador de temas ──
 try:
     topic_clf = joblib.load("src/topic_clf.joblib")
 except:
     topic_clf = None
     print("⚠️ No se encontró topic_clf.joblib. Solo se usarán etiquetas si están disponibles.")
 
-# ── Carga diferida (cacheada) de FinBERT ──
+# ── Carga segura de FinBERT (evita errores de event loop y Torch en Streamlit) ──
 @st.cache_resource
 def load_finbert():
     tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
@@ -32,13 +32,13 @@ def load_finbert():
     model.eval()
     return tokenizer, model
 
-# ── Limpiador de texto ──
+# ── Limpieza de texto ──
 def clean(text: str) -> str:
     text = emoji.replace_emoji(text, replace="")
     text = re.sub(r"http\S+|@\w+|#\w+", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
-# ── Clasificación de sentimiento ──
+# ── Clasificación de sentimiento con FinBERT ──
 def finbert_sentiment(texts: list[str]) -> list[str]:
     tokenizer, model = load_finbert()
     tokens = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
@@ -51,17 +51,20 @@ def finbert_sentiment(texts: list[str]) -> list[str]:
 def extract_tickers(text: str) -> list[str]:
     return re.findall(r"\b[A-Z]{2,5}\b", text)
 
-# ── Etiquetado completo ──
+# ── Función principal: etiquetado completo ──
 def add_labels(df: pd.DataFrame) -> pd.DataFrame:
     df["clean"] = df["text"].map(clean)
     df["sentiment"] = finbert_sentiment(df["clean"].tolist())
     df["tickers"] = df["clean"].map(extract_tickers)
 
     if "label" in df:
+        # Usa columna 'label' numérica si está disponible
         df["topic"] = df["label"].map(lambda x: label_map[x] if 0 <= x < len(label_map) else "Unknown")
     elif topic_clf:
+        # Si no hay label, pero hay clasificador, lo usa
         df["topic"] = topic_clf.predict(df["clean"])
     else:
+        # Caso de fallback
         df["topic"] = "Unknown"
 
     return df
