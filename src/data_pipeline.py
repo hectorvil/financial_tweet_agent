@@ -3,13 +3,10 @@ import emoji
 import pandas as pd
 import torch
 import joblib
+import streamlit as st
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-# ── FinBERT ──
-FINBERT_MODEL = "ProsusAI/finbert"
-_tokenizer = AutoTokenizer.from_pretrained(FINBERT_MODEL)
-_model = AutoModelForSequenceClassification.from_pretrained(FINBERT_MODEL)
-_model.eval()
+# ── Mapeo de sentimiento ──
 id2label = {0: "negative", 1: "neutral", 2: "positive"}
 
 # ── Mapeo de temas ──
@@ -20,12 +17,20 @@ label_map = [
     "Stock Movement", "Tech", "Trade", "USD"
 ]
 
-# ── Carga opcional del clasificador de temas ──
+# ── Carga condicional del clasificador de temas ──
 try:
     topic_clf = joblib.load("src/topic_clf.joblib")
 except:
     topic_clf = None
     print("⚠️ No se encontró topic_clf.joblib. Solo se usarán etiquetas si están disponibles.")
+
+# ── Carga diferida (cacheada) de FinBERT ──
+@st.cache_resource
+def load_finbert():
+    tokenizer = AutoTokenizer.from_pretrained("ProsusAI/finbert")
+    model = AutoModelForSequenceClassification.from_pretrained("ProsusAI/finbert")
+    model.eval()
+    return tokenizer, model
 
 # ── Limpiador de texto ──
 def clean(text: str) -> str:
@@ -33,11 +38,12 @@ def clean(text: str) -> str:
     text = re.sub(r"http\S+|@\w+|#\w+", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
-# ── FinBERT sentimiento ──
+# ── Clasificación de sentimiento ──
 def finbert_sentiment(texts: list[str]) -> list[str]:
-    tokens = _tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
+    tokenizer, model = load_finbert()
+    tokens = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
     with torch.no_grad():
-        logits = _model(**tokens).logits
+        logits = model(**tokens).logits
     preds = torch.argmax(logits, dim=1).tolist()
     return [id2label[p] for p in preds]
 
