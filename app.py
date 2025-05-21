@@ -29,7 +29,8 @@ parquet_file = st.sidebar.file_uploader("Sube un archivo .parquet", type="parque
 
 if parquet_file:
     st.sidebar.success("✅ Archivo subido")
-    agent.ingest(parquet_file)
+    with st.spinner("🧠 Procesando: limpiando, clasificando, generando embeddings..."):
+        agent.ingest(parquet_file)
 elif not agent.df.empty:
     st.sidebar.info("Usando dataset ya cargado en memoria")
 else:
