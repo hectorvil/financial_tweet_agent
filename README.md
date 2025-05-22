@@ -9,7 +9,7 @@ Un agente Streamlit interactivo que analiza y clasifica tweets financieros por *
 - **Etiquetado automático** de tweets financieros mediante FinBert (sentimiento: `positive`, `neutral`, `negative`. Y también etiqueta por tema en 21 categorías como: `Politics`, `IPO`, `Federal Reserve`, `Gold`, etc.)
 - **Chat RAG histórico**: puedes preguntar cosas como *"¿Qué se dice sobre NVIDIA?"*
 - **Consulta en vivo**: busca en Twitter (X) y te resume lo más reciente
-- **Dashboard visual**: muestra sentimiento por ticker (ej. `AAPL`, `TSLA`)
+- **Dashboard visual**: muestra sentimiento por ticker (ej. `AAPL`, `TSLA`, `AMZN`, `MSFT`)
 
 ---
 
