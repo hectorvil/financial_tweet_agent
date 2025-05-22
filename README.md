@@ -21,7 +21,7 @@ Un agente Streamlit interactivo que analiza y clasifica tweets financieros por *
 | **1. Upload / Live fetch** | Ingesta de tweets en bruto (archivo **.parquet** histórico o stream desde la **Twitter API**). | — |
 | **2. Data pipeline** | Limpieza → etiquetado → embeddings. | **`clean()`** elimina URLs, menciones y emojis. <br> **FinBERT** (`ProsusAI/finbert`, 110 M parámetros) asigna **positive / neutral / negative**. <br> **Topic classifier** (SVM + MPNet) mapea 20 temas fijos — Dividend, Fed, M&A… <br> **Mini-LM** (`all-MiniLM-L6-v2`) produce un vector `ℝ³⁸⁴` por tweet; se salta si la columna `embedding` ya existe. |
 | **3. ChromaDB** | Persistencia y búsqueda vectorial. | Almacena `doc_id`, texto y embedding en un índice **HNSW** (*cosine*); responde k-NN en **< 20 ms**. |
-| **4. RAG (Retrieval-Augmented Generation)** | Contexto + LLM. | 1) La pregunta se embebe con Mini-LM.<br>2) Chroma devuelve los 30 tweets más cercanos.<br>3) Se arma el prompt:<br><code>Contexto:<br>• 17-May NVDA beats estimates…<br>• …<br>Pregunta: ¿Qué se dice de NVIDIA?</code><br>4) GPT-4o-mini responde usando <i>solo</i> ese contexto. |
+| **4. RAG (Retrieval-Augmented Generation)** | Contexto + LLM. | 1) La pregunta se embebe con Mini-LM.<br>2) Chroma devuelve los 30 tweets más cercanos.<br>3) Se arma el prompt:<br><code>: ¿Qué se dice de NVIDIA?</code><br>4) GPT-4o-mini responde usando <i>solo</i> ese contexto. |
 | **5. Dashboard** | Métricas de sentimiento. | `agent.pivot()` agrupa por **ticker** y **sentiment**, calcula `pos_ratio / neg_ratio`; **Plotly** renderiza el ranking interactivo. |
 
 
