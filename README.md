@@ -15,18 +15,45 @@ Un agente Streamlit interactivo que analiza y clasifica tweets financieros por *
 
 ## Estructura
 
-financial-tweet-agent/
-├── app.py
-├── requirements.txt
-├── .env.example
-├── data/
-│ └── tweets_fin_2024.parquet
-├── src/
-│ ├── agent.py
-│ ├── data_pipeline.py
-│ ├── twitter_live.py
-│ ├── vector_db.py
-│ └── plotting.py
+Upload / Live fetch
+
+Tweets entran en bruto desde un .parquet o la Twitter API.
+
+Data pipeline
+
+clean() quita URLs, menciones y emojis.
+
+FinBERT → asigna positive / neutral / negative.
+FinBERT es un bert-base-uncased afinado por ProsusAI en earnings calls y news headlines. Tiene 110 M parámetros y entiende terminología financiera (“hawkish”, “buyback”).
+
+Topic classifier → SVM lineal entrenada en embeddings MPNet, 20 etiquetas fijas (Dividend, Federal Reserve, M&A, …).
+
+Mini-LM embeddings → vector ℝ^384 para cada tweet; solo se calcula si la columna embedding no existe.
+
+ChromaDB
+
+Guarda doc_id, texto y embedding en un índice HNSW (cosine).
+
+Responde k-NN en < 20 ms.
+
+RAG (Retrieval-Augmented Generation)
+
+La pregunta del usuario se embebe con Mini-LM → se consulta Chroma → se recuperan 30 tweets relevantes.
+
+Se construye un prompt:
+
+makefile
+Copy
+Edit
+Contexto:
+• 17-May NVDA beats estimates…
+• …
+Pregunta: ¿Qué se dice de NVIDIA?
+GPT-4o-mini sintetiza la respuesta usando solo ese contexto.
+
+Dashboard
+
+agent.pivot() agrupa por tickers y sentiment, calcula pos_ratio / neg_ratio y Plotly dibuja el ranking
 
 
 ---
