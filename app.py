@@ -9,8 +9,8 @@ st.set_page_config(page_title="Financial-Tweet Agent", layout="wide")
 st.title("Financial-Tweet Agent")
 
 # ── Carga de claves desde entorno o st.secrets ─────────────────────────────
-openai_key = os.getenv("OPENAI_API_KEY", st.secrets.get("OPENAI_API_KEY", ""))
-twitter_key = os.getenv("TWITTER_BEARER", st.secrets.get("TWITTER_BEARER", ""))
+openai_key = os.getenv("OPENAI_API_KEY")
+twitter_key = os.getenv("TWITTER_BEARER")
 
 if not openai_key:
     st.warning("OPENAI_API_KEY no configurada. GPT no responderá preguntas.")
