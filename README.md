@@ -28,16 +28,35 @@ Un agente Streamlit interactivo que analiza y clasifica tweets financieros por *
 
 ---
 
-## Cómo correrlo localmente
+## Cómo ponerlo en marcha
 
-1. Clona el repo
-2. Instala dependencias
-3. Añade tus claves a `.env`
+### A. Ejecutar con notebook (recomendado para pruebas rápidas)
+
+1. Abre `run_agent.ipynb` en Colab, JupyterLab o VS Code.
+2. Ejecuta **todas las celdas**:
+   - Instala dependencias (solo la primera vez).
+   - Pregunta por tus `OPENAI_API_KEY` y `TWITTER_BEARER` (puedes dejarlas vacías).
+   - Lanza el dashboard y muestra la URL pública de ngrok.
+3. Sube tu `.parquet` desde la interfaz y listo.
+
+> *No necesitas tocar la terminal; el notebook lo hace todo.*
+
+---
+
+### B. Ejecutar desde la terminal
 
 ```bash
+# 1) Clonar y crear entorno
 git clone https://github.com/tu_usuario/financial-tweet-agent.git
 cd financial-tweet-agent
 python -m venv venv && source venv/bin/activate
+
+# 2) Instalar dependencias
 pip install -r requirements.txt
-cp .env.example .env  # luego edítalo con tus claves reales
+
+# 3) (Opcional) exportar claves o usar .env
+export OPENAI_API_KEY="sk-···"
+export TWITTER_BEARER="AAAAAAAA…"
+
+# 4) Lanzar Streamlit (localhost:8501)
 streamlit run app.py
