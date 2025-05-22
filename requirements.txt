@@ -22,3 +22,4 @@ python-dotenv>=1.0             # variables secretas
 # ——— Data / utils ————————————————————————————————
 numpy<2                        # evita np.float_ removal
 typing_extensions>=4.7
+emoji==2.11.1
