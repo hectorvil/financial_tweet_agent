@@ -35,15 +35,23 @@ def clean(text: str) -> str:
     text = re.sub(r"http\S+|@\w+|#\w+", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
-def finbert_sentiment(texts: list[str], batch: int = 32) -> list[str]:
-    tok, mdl = load_finbert()
-    preds = []
+def finbert_sentiment(texts: list[str], batch: int = 16) -> list[str]:
+    """
+    Devuelve ['positive'|'neutral'|'negative'] usando SIEMPRE CPU.
+    Evita cualquier riesgo de CUDA illegal memory access.
+    """
+    tokenizer, model = load_finbert()   # el modelo está en CPU por defecto
+    preds: list[int] = []
+
     for i in range(0, len(texts), batch):
-        toks = tok(texts[i:i+batch], padding=True, truncation=True, return_tensors="pt")
+        chunk = texts[i : i + batch]
+        toks = tokenizer(chunk, padding=True, truncation=True, return_tensors="pt")  # tensors en CPU
         with torch.inference_mode():
-            logits = mdl(**toks).logits
+            logits = model(**toks).logits          # forward en CPU
         preds.extend(torch.argmax(logits, dim=1).tolist())
+
     return [id2label[p] for p in preds]
+
 
 COMMON_WORDS = {"BANK", "GDP", "USA", "FED", "ECB", "USD"}
 
