@@ -73,8 +73,21 @@ with tab2:
 # ── Tab 3: Dashboard ───────────────────────────────────────────────────────
 with tab3:
     st.subheader("Análisis de sentimiento por ticker")
+
+    # 🔢 Recuento rápido de menciones
+    with st.expander("Ver recuento de menciones por ticker", expanded=False):
+        ticker_counts = (
+            agent.df.explode("tickers")
+                    .dropna(subset=["tickers"])
+                    .value_counts("tickers")
+        )
+        top_n = st.slider("Top-N", 5, 50, 20, key="topn_slider")
+        st.dataframe(ticker_counts.head(top_n), use_container_width=True)
+
+    # —— Controles de la gráfica ——
     min_m = st.slider("Mínimo de menciones por ticker", 10, 300, 50, 10)
     metric = st.selectbox("Métrica a mostrar", ["neg_ratio", "pos_ratio", "total"])
+
     piv = agent.pivot(min_m)
     if not piv.empty:
         chart = build_sentiment_bar(piv, metric)
