@@ -5,20 +5,15 @@ from sentence_transformers import SentenceTransformer
 
 @st.cache_resource
 def load_embedder() -> SentenceTransformer:
-    """Carga una sola vez el modelo Mini-LM para todo el proceso."""
-    return SentenceTransformer("all-MiniLM-L6-v2")
+    # device='cpu' garantiza que Mini-LM no use la GPU
+    return SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 
 
 class VectorDB:
-    """
-    Wrapper sobre ChromaDB con deduplicación y embeddings cacheados.
-    Accepta embeddings precalculados si vienen en el DataFrame.
-    """
     def __init__(self, path: str = "chroma_db"):
         self.client = PersistentClient(path)
         self.collection = self.client.get_or_create_collection(
-            name="tweets",
-            metadata={"hnsw:space": "cosine"},
+            name="tweets", metadata={"hnsw:space": "cosine"}
         )
         self.embedder = load_embedder()
 
@@ -36,19 +31,17 @@ class VectorDB:
 
     # ── API pública ────────────────────────────────────────────────
     def add(self, ids, texts, embeddings=None):
-        """
-        Añade documentos.
-        - Si embeddings==None, los calcula con Mini-LM.
-        - Si se proporcionan (lista de listas), se usan directamente.
-        """
+        """Añade documentos deduplicando IDs; calcula embeddings si faltan."""
         if embeddings is None:
-            embeddings = self.embedder.encode(texts, batch_size=64).tolist()
-
+            # ───────────────────────────────────────────────────────────────
+            # 2) Embeddings en CPU para estabilidad
+            embeddings = (
+                self.embedder.encode(texts, batch_size=64, device="cpu")
+                .tolist()
+            )
         ids, texts, embeddings = self._filter_new(ids, texts, embeddings)
-        if not ids:  # nada nuevo
-            return
-
-        self.collection.add(ids=ids, documents=texts, embeddings=embeddings)
+        if ids:
+            self.collection.add(ids=ids, documents=texts, embeddings=embeddings)
 
     def query(self, query_text: str, k: int = 30):
         q_emb = self.embedder.encode([query_text]).tolist()
