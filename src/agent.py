@@ -89,15 +89,25 @@ class FinancialTweetAgent:
     # ────────────────────────────────────────────────────────────────
     def insight_hist(self, query: str, k: int = 30) -> str:
         docs = self.db.query(query, k)
-        context = "\n".join(text[:280] for text in docs)
+
+        # Buscar en self.df los registros originales para obtener sus sentimientos
+        subset = self.df[self.df["clean"].isin(docs)]
+        pos = (subset["sentiment"] == "positive").sum()
+        neu = (subset["sentiment"] == "neutral").sum()
+        neg = (subset["sentiment"] == "negative").sum()
+        total = max(pos + neu + neg, 1)
+
+        ratios = f"(+ {pos/total:.2f} | = {neu/total:.2f} | − {neg/total:.2f})"
+
+        context = "\n".join(t[:280] for t in docs)
 
         prompt = f"""
-Usa solo el siguiente contexto para responder.
+Usa SOLO el contexto siguiente para responder.
 Contexto:
 {context}
 
 Pregunta: {query}
-Responde en español, de forma breve y clara.
+Responde en español de forma clara, cita tweet_id cuando corresponda y menciona si predomina un tono positivo o negativo.
 """.strip()
 
         response = openai.chat.completions.create(
@@ -105,7 +115,10 @@ Responde en español, de forma breve y clara.
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
         )
-        return response.choices[0].message.content.strip()
+
+        answer = response.choices[0].message.content.strip()
+        return f"{answer}\n\n📊 Sentiment {ratios}"
+
 
     # ────────────────────────────────────────────────────────────────
     # Live search (Twitter) + ingest
