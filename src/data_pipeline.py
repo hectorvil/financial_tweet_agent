@@ -53,11 +53,16 @@ def finbert_sentiment(texts: list[str], batch: int = 16) -> list[str]:
     return [id2label[p] for p in preds]
 
 
-COMMON_WORDS = {"BANK", "GDP", "USA", "FED", "ECB", "USD"}
+COMMON_WORDS = {
+    "BANK", "GDP", "FED", "ECB",
+    "AND", "THE", "YEAR", "TIME", "NEWS", "DATA"
+}
 
 def extract_tickers(text: str) -> list[str]:
+    """Devuelve lista de símbolos de 2-5 letras en mayúsculas que no sean stop-words."""
     tickers = [t.lstrip("$") for t in re.findall(r"\$?[A-Z]{2,5}\b", text)]
     return [t for t in tickers if t not in COMMON_WORDS]
+
 
 # ── pipeline principal ───────────────────────────────────────────
 def add_labels(df: pd.DataFrame, *, skip_if_present: bool = True) -> pd.DataFrame:
