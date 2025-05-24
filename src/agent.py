@@ -3,7 +3,7 @@ import openai
 
 from src.vector_db import VectorDB
 from src.data_pipeline import add_labels, clean
-
+from src.data_pipeline import add_labels
 
 class FinancialTweetAgent:
     """
@@ -19,33 +19,47 @@ class FinancialTweetAgent:
     # ────────────────────────────────────────────────────────────────
     # Ingesta
     # ────────────────────────────────────────────────────────────────
-    def ingest(self, parquet_file):
-        """
-        Carga un Parquet, añade etiquetas faltantes y sube documentos a Chroma.
+    import streamlit as st
+import pandas as pd
+from src.data_pipeline import add_labels
 
-        - Si el Parquet YA incluye columnas `sentiment`, `topic`, `tickers`,
-          `clean` y opcionalmente `embedding`, no se recalculan.
-        - Evita duplicados comparando `doc_id`.
+# … resto de la clase …
+
+    # ────────────────────────────────────────────────────────────────
+    # Ingesta única por sesión
+    # ────────────────────────────────────────────────────────────────
+    def ingest(self, parquet_file) -> None:
+        """
+        Carga un Parquet y lo añade a la base vectorial.
+        - Si el archivo YA contiene columnas `clean`, `sentiment`, `tickers`
+          y `embedding`, las respeta y no recalcula nada.
+        - Si falta alguna, las calcula en CPU (puede tardar).
+        - Deduplica documentos por `doc_id`.
         """
         df = pd.read_parquet(parquet_file)
 
-        # 1) Completar etiquetas solo si faltan
-        needs_labels = any(
-            col not in df for col in ("sentiment", "topic", "clean", "tickers")
-        )
-        if needs_labels:
+        # 1️⃣  Detectar si el archivo está listo
+        required = {"clean", "sentiment", "tickers", "embedding"}
+        incomplete = required.difference(df.columns)
+
+        if incomplete:
+            st.info(
+                f"El archivo no contiene {', '.join(incomplete)}. "
+                "Se calcularán ahora (podría tardar)."
+            )
             df = add_labels(df, skip_if_present=True)
 
-        # 2) Clean fallback
-        if "clean" not in df:
-            df["clean"] = df["text"].map(clean)
+            # embeddings faltan: los calcula VectorDB al llamar .add()
+            has_embed = False
+        else:
+            has_embed = True
 
-        # 3) doc_id obligatorio
+        # 2️⃣  Asegurar doc_id
         if "doc_id" not in df:
             df["doc_id"] = df.index.astype(str)
 
-        # 4) Añadir a Chroma (usa embeddings precalculados si existen)
-        if "embedding" in df:
+        # 3️⃣  Añadir a Chroma (usa embeddings precalculados si existen)
+        if has_embed:
             self.db.add(
                 ids=df["doc_id"].tolist(),
                 texts=df["clean"].tolist(),
@@ -54,8 +68,11 @@ class FinancialTweetAgent:
         else:
             self.db.add(df["doc_id"].tolist(), df["clean"].tolist())
 
-        # 5) Cache in-memory para pivot
+        # 4️⃣  Cache en memoria para Dashboard / consultas
         self.df = pd.concat([self.df, df], ignore_index=True)
+
+        st.success(f"✅ Ingesta completada: {len(df):,} documentos añadidos.")
+
 
     # ────────────────────────────────────────────────────────────────
     # Dashboard helper
