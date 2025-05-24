@@ -18,28 +18,32 @@ if not twitter_key:
     st.warning("TWITTER_BEARER no configurada. La búsqueda en vivo no funcionará.")
 
 # ── Inicializar agente si no existe ────────────────────────────────────────
-if "agent" not in st.session_state:
-    st.session_state.agent = FinancialTweetAgent()
-
-agent = st.session_state.agent
-
-# ── Sidebar: carga de archivo parquet ──────────────────────────────────────
+# ── Sidebar: carga de archivo parquet ─────────────────────────────
 st.sidebar.header("Cargar archivo")
 parquet_file = st.sidebar.file_uploader("Sube un archivo .parquet", type="parquet")
 
-if parquet_file:
+# ── Ingesta única (flag en session_state) ─────────────────────────
+if parquet_file and "processed" not in st.session_state:
     st.sidebar.success("✅ Archivo subido")
     with st.spinner("🧠 Procesando: limpiando, clasificando, generando embeddings..."):
         agent.ingest(parquet_file)
-elif not agent.df.empty:
+    st.session_state.processed = True
+
+# Si ya se procesó una vez, sólo avisamos
+elif "processed" in st.session_state:
     st.sidebar.info("Usando dataset ya cargado en memoria")
+
+# Si no suben nada, carga el demo una sola vez
 else:
     demo_path = "data/tweets_fin_2024.parquet"
-    if os.path.exists(demo_path):
-        agent.ingest(demo_path)
+    if os.path.exists(demo_path) and "demo_loaded" not in st.session_state:
+        with st.spinner("Cargando dataset de demo..."):
+            agent.ingest(demo_path)
         st.sidebar.success("Dataset de demo cargado automáticamente")
-    else:
-        st.stop()
+        st.session_state.processed = True
+        st.session_state.demo_loaded = True
+    elif "demo_loaded" not in st.session_state:
+        st.stop()   # muestra “Sube un parquet para comenzar”
 
 # ── Tabs: interfaz principal ───────────────────────────────────────────────
 tab1, tab2, tab3 = st.tabs(["🤖 Chat histórico", "⚡ Live", "📊 Dashboard"])
